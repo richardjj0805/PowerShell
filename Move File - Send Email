@@ -1,0 +1,32 @@
+#Powershell - Move Files and Send Email
+
+
+$from_dir = "\\SYDSMFTNAS01\MiPortal\2_FTPROOT\Seqirus\Inbox\"
+$to_dir = "\\SYDSMFTNAS01\MiPortal\1_MiPORTAL_DATA\Seqirus\1_RECEIVED\"
+$file_pattern = "Seqirus_MiData_*.zip"
+$files = get-childitem -LiteralPath $from_dir -Filter $file_pattern  |Sort-Object LastWriteTime -Descending | Select-Object -First 1
+
+Write-Output ( (Get-Date).ToString() + " - File copy script starting." )
+#Apparently, Send-MailMessage doesn't work from within SQLPS, so we are left with creating this hack of a function, so that we can send alerts further down:
+Function SendEmail([string]$emailFrom, [string]$recipient_list, [string]$subject,[string]$body,[string]$smtpServer)
+{
+$smtp = new-object Net.Mail.SmtpClient($smtpServer)
+$smtp.Send($emailFrom,$recipient_list,$subject,$body)
+}
+
+#Create destination directory if it doesn't exist:
+if (!(Test-Path -path $to_dir)) {New-Item $to_dir -Type Directory
+$subject = "Seiqurs_* - No Files"
+$body = "This email is to advise that Seqirus Access DB is not ready "
+SendEmail $from $recipient_list $subject $body $smtpServer
+
+}
+#Files are present, so we should copy them from FTP to Processing Folder:
+ForEach ($file in $files) {
+	Write-Output ( (Get-Date).ToString() + " - Moving file: " + $file.FullName )
+	Move-Item $file.FullName -Destination $to_dir -force
+	$subject = "Bayer AU -UserManagement_* -  Files Provided"
+	$body = "This email is to advise that Seqirus Access DB has moved to new location"
+	SendEmail $from $recipient_list $subject $body $smtpServer
+}
+Write-Output ( (Get-Date).ToString() +  " - File copy script finished." )
